@@ -7,9 +7,12 @@ import { CharacterSoldier } from "./CharacterSoldier";
 const MOVEMENT_SPEED = 202;
 const FIRE_RATE = 380;
 export const WEAPON_OFFSET = {
-  x: -0.2,
+  // x: -0.2,
+  // y: 1.4,
+  // z: 0.8,
+  x: 0,
   y: 1.4,
-  z: 0.8,
+  z: 0,
 };
 
 export const CharacterController = ({
@@ -112,7 +115,7 @@ export const CharacterController = ({
         playerWorldPos.x + Math.sin(rotationY) * Math.cos(rotationX) * 10,
         playerWorldPos.y + eyeHeight + Math.sin(rotationX) * 10,
         playerWorldPos.z + Math.cos(rotationY) * Math.cos(rotationX) * 10,
-        true
+        false // Disabled smooth transition
       );
     }
 
@@ -171,9 +174,21 @@ export const CharacterController = ({
             lastShoot.current = Date.now();
             // Generate a more unique ID with a random component
             const uniqueId = state.id + "-" + Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+            
+            // Get player position
+            const playerPos = vec3(rigidbody.current.translation());
+            
+            // Calculate bullet spawn position with forward offset based on player rotation
+            const forwardOffset = 1.0; // Distance in front of player
+            const bulletPosition = {
+              x: playerPos.x + Math.sin(rotationY) * forwardOffset,
+              y: playerPos.y + 0, // Adjust to match weapon height
+              z: playerPos.z + Math.cos(rotationY) * forwardOffset,
+            };
+            
             const newBullet = {
               id: uniqueId,
-              position: vec3(rigidbody.current.translation()),
+              position: bulletPosition,
               angle: rotationY,  // Horizontal rotation (yaw)
               rotationX: rotationX, // Vertical rotation (pitch)
               player: state.id,
@@ -204,7 +219,12 @@ export const CharacterController = ({
 
   return (
     <group {...props} ref={group}>
-      {userPlayer && <CameraControls ref={cameraControls} />}
+      {userPlayer && <CameraControls 
+        ref={cameraControls} 
+        dampingFactor={0} 
+        draggingDampingFactor={0}
+        smoothTime={0}
+      />}
       <RigidBody
         ref={rigidbody}
         colliders={false}
@@ -244,11 +264,6 @@ export const CharacterController = ({
               color={state.state.profile?.color}
               animation={animation}
               weapon={weapon}
-            />
-          )}
-          {userPlayer && (
-            <Crosshair
-              position={[WEAPON_OFFSET.x, WEAPON_OFFSET.y, WEAPON_OFFSET.z]}
             />
           )}
         </group>
@@ -296,39 +311,5 @@ const PlayerInfo = ({ state }) => {
         <meshBasicMaterial color="red" />
       </mesh>
     </Billboard>
-  );
-};
-
-const Crosshair = (props) => {
-  return (
-    <group {...props}>
-      <mesh position-z={1}>
-        <boxGeometry args={[0.05, 0.05, 0.05]} />
-        <meshBasicMaterial color="black" transparent opacity={0.9} />
-      </mesh>
-      <mesh position-z={2}>
-        <boxGeometry args={[0.05, 0.05, 0.05]} />
-        <meshBasicMaterial color="black" transparent opacity={0.85} />
-      </mesh>
-      <mesh position-z={3}>
-        <boxGeometry args={[0.05, 0.05, 0.05]} />
-        <meshBasicMaterial color="black" transparent opacity={0.8} />
-      </mesh>
-
-      <mesh position-z={4.5}>
-        <boxGeometry args={[0.05, 0.05, 0.05]} />
-        <meshBasicMaterial color="black" opacity={0.7} transparent />
-      </mesh>
-
-      <mesh position-z={6.5}>
-        <boxGeometry args={[0.05, 0.05, 0.05]} />
-        <meshBasicMaterial color="black" opacity={0.6} transparent />
-      </mesh>
-
-      <mesh position-z={9}>
-        <boxGeometry args={[0.05, 0.05, 0.05]} />
-        <meshBasicMaterial color="black" opacity={0.2} transparent />
-      </mesh>
-    </group>
   );
 };

@@ -50,9 +50,9 @@ export const Experience = ({ downgradedPerformance = false }) => {
         window.addEventListener("mousemove", (e) => {
           // Only update if the pointer is locked (FPS controls active)
           if (document.pointerLockElement) {
-            // Update rotation based on mouse movement
-            controls.rotation.x -= e.movementY * 0.01; // Vertical rotation (pitch)
-            controls.rotation.y -= e.movementX * 0.01; // Horizontal rotation (yaw)
+            // Update rotation based on mouse movement - removed smoothing factor
+            controls.rotation.x -= e.movementY / 100; // Vertical rotation (pitch)
+            controls.rotation.y -= e.movementX / 100; // Horizontal rotation (yaw)
             
             // Limit vertical rotation to prevent camera flipping
             controls.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, controls.rotation.x));
