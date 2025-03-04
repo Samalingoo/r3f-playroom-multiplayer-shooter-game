@@ -13,27 +13,31 @@ const bulletMaterial = new MeshBasicMaterial({
 
 bulletMaterial.color.multiplyScalar(42);
 
-export const Bullet = ({ player, angle, position, onHit }) => {
+export const Bullet = ({ player, position, angle, rotationX = 0, onHit }) => {
   const rigidbody = useRef();
 
   useEffect(() => {
     const audio = new Audio("/audios/rifle.mp3");
     audio.play();
+    
+    // Calculate velocity with both horizontal and vertical components
     const velocity = {
-      x: Math.sin(angle) * BULLET_SPEED,
-      y: 0,
-      z: Math.cos(angle) * BULLET_SPEED,
+      x: Math.sin(angle) * Math.cos(rotationX) * BULLET_SPEED,
+      y: Math.sin(rotationX) * BULLET_SPEED, // Vertical component
+      z: Math.cos(angle) * Math.cos(rotationX) * BULLET_SPEED,
     };
 
     rigidbody.current.setLinvel(velocity, true);
   }, []);
 
   return (
-    <group position={[position.x, position.y, position.z]} rotation-y={angle}>
+    <group position={[position.x, position.y, position.z]}>
       <group
         position-x={WEAPON_OFFSET.x}
         position-y={WEAPON_OFFSET.y}
         position-z={WEAPON_OFFSET.z}
+        rotation-y={angle}
+        rotation-x={rotationX}
       >
         <RigidBody
           ref={rigidbody}

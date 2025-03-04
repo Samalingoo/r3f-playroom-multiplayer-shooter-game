@@ -14,7 +14,7 @@ export const WEAPON_OFFSET = {
 
 export const CharacterController = ({
   state,
-  joystick,
+  controls,
   userPlayer,
   onKilled,
   onFire,
@@ -66,61 +66,120 @@ export const CharacterController = ({
   }, [state.state.health]);
 
   useFrame((_, delta) => {
-    // CAMERA FOLLOW
-    if (controls.current) {
-      const cameraDistanceY = window.innerWidth < 1024 ? 16 : 20;
-      const cameraDistanceZ = window.innerWidth < 1024 ? 12 : 16;
-      const playerWorldPos = vec3(rigidbody.current.translation());
-      controls.current.setLookAt(
-        playerWorldPos.x,
-        playerWorldPos.y + (state.state.dead ? 12 : cameraDistanceY),
-        playerWorldPos.z + (state.state.dead ? 2 : cameraDistanceZ),
-        playerWorldPos.x,
-        playerWorldPos.y + 1.5,
-        playerWorldPos.z,
-        true
-      );
-    }
-
     if (state.state.dead) {
       setAnimation("Death");
       return;
     }
 
-    // Update player position based on joystick state
-    const angle = joystick.angle();
-    if (joystick.isJoystickPressed() && angle) {
-      setAnimation("Run");
-      character.current.rotation.y = angle;
+    // Get the current rotation from state for non-user players or from controls for user player
+    let rotationX = 0;
+    let rotationY = 0;
 
-      // move character in its own direction
-      const impulse = {
-        x: Math.sin(angle) * MOVEMENT_SPEED * delta,
-        y: 0,
-        z: Math.cos(angle) * MOVEMENT_SPEED * delta,
-      };
-
-      rigidbody.current.applyImpulse(impulse, true);
+    if (userPlayer) {
+      rotationX = controls.rotation.x;
+      rotationY = controls.rotation.y;
     } else {
-      setAnimation("Idle");
+      // Get rotation from network state for other players
+      const networkRotation = state.getState("rotation");
+      if (networkRotation) {
+        rotationX = networkRotation.x;
+        rotationY = networkRotation.y;
+      }
     }
 
-    // Check if fire button is pressed
-    if (joystick.isPressed("fire")) {
-      // fire
-      setAnimation(
-        joystick.isJoystickPressed() && angle ? "Run_Shoot" : "Idle_Shoot"
+    // Apply rotation to character
+    if (character.current) {
+      character.current.rotation.y = rotationY;
+    }
+
+    // CAMERA FOLLOW - First Person
+    if (cameraControls.current && userPlayer) {
+      const playerWorldPos = vec3(rigidbody.current.translation());
+      
+      // Position camera at eye level
+      const eyeHeight = 1.7;
+      
+      // Calculate camera position and look target based on player rotation
+      const forwardX = Math.sin(rotationY);
+      const forwardZ = Math.cos(rotationY);
+      
+      // Position the camera at player's head
+      cameraControls.current.setLookAt(
+        playerWorldPos.x,
+        playerWorldPos.y + eyeHeight,
+        playerWorldPos.z,
+        // Look in the direction determined by mouse rotation
+        playerWorldPos.x + Math.sin(rotationY) * Math.cos(rotationX) * 10,
+        playerWorldPos.y + eyeHeight + Math.sin(rotationX) * 10,
+        playerWorldPos.z + Math.cos(rotationY) * Math.cos(rotationX) * 10,
+        true
       );
-      if (isHost()) {
-        if (Date.now() - lastShoot.current > FIRE_RATE) {
-          lastShoot.current = Date.now();
-          const newBullet = {
-            id: state.id + "-" + +new Date(),
-            position: vec3(rigidbody.current.translation()),
-            angle,
-            player: state.id,
-          };
-          onFire(newBullet);
+    }
+
+    // Handle WASD movement for the current player
+    if (userPlayer) {
+      let moving = false;
+      let moveX = 0;
+      let moveZ = 0;
+
+      // Calculate movement direction based on WASD keys
+      if (controls.movement.forward) {
+        moveZ += Math.cos(rotationY);
+        moveX += Math.sin(rotationY);
+        moving = true;
+      }
+      if (controls.movement.backward) {
+        moveZ -= Math.cos(rotationY);
+        moveX -= Math.sin(rotationY);
+        moving = true;
+      }
+      if (controls.movement.left) {
+        moveZ -= Math.sin(rotationY);
+        moveX += Math.cos(rotationY);
+        moving = true;
+      }
+      if (controls.movement.right) {
+        moveZ += Math.sin(rotationY);
+        moveX -= Math.cos(rotationY);
+        moving = true;
+      }
+
+      // Normalize movement vector if moving diagonally
+      if (moveX !== 0 && moveZ !== 0) {
+        const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
+        moveX /= length;
+        moveZ /= length;
+      }
+
+      // Apply movement impulse
+      if (moving) {
+        setAnimation(controls.shooting ? "Run_Shoot" : "Run");
+        const impulse = {
+          x: moveX * MOVEMENT_SPEED * delta,
+          y: 0,
+          z: moveZ * MOVEMENT_SPEED * delta,
+        };
+        rigidbody.current.applyImpulse(impulse, true);
+      } else {
+        setAnimation(controls.shooting ? "Idle_Shoot" : "Idle");
+      }
+
+      // Handle shooting
+      if (controls.shooting) {
+        if (isHost()) {
+          if (Date.now() - lastShoot.current > FIRE_RATE) {
+            lastShoot.current = Date.now();
+            // Generate a more unique ID with a random component
+            const uniqueId = state.id + "-" + Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+            const newBullet = {
+              id: uniqueId,
+              position: vec3(rigidbody.current.translation()),
+              angle: rotationY,  // Horizontal rotation (yaw)
+              rotationX: rotationX, // Vertical rotation (pitch)
+              player: state.id,
+            };
+            onFire(newBullet);
+          }
         }
       }
     }
@@ -134,7 +193,7 @@ export const CharacterController = ({
       }
     }
   });
-  const controls = useRef();
+  const cameraControls = useRef();
   const directionalLight = useRef();
 
   useEffect(() => {
@@ -145,7 +204,7 @@ export const CharacterController = ({
 
   return (
     <group {...props} ref={group}>
-      {userPlayer && <CameraControls ref={controls} />}
+      {userPlayer && <CameraControls ref={cameraControls} />}
       <RigidBody
         ref={rigidbody}
         colliders={false}
@@ -180,11 +239,13 @@ export const CharacterController = ({
       >
         <PlayerInfo state={state.state} />
         <group ref={character}>
-          <CharacterSoldier
-            color={state.state.profile?.color}
-            animation={animation}
-            weapon={weapon}
-          />
+          {(!userPlayer || state.state.dead) && (
+            <CharacterSoldier
+              color={state.state.profile?.color}
+              animation={animation}
+              weapon={weapon}
+            />
+          )}
           {userPlayer && (
             <Crosshair
               position={[WEAPON_OFFSET.x, WEAPON_OFFSET.y, WEAPON_OFFSET.z]}
